@@ -6,18 +6,17 @@ from config import SMA_PERIOD, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD
 
 def get_technical_analysis(symbol):
     try:
+        # Silencer (Bungkam output yfinance)
         with open(os.devnull, 'w') as fnull:
             with contextlib.redirect_stdout(fnull), contextlib.redirect_stderr(fnull):
-                # Download data
                 df = yf.download(tickers=symbol, period="6mo", interval="1d", progress=False)
         
         if df.empty or len(df) < 50: return None
         
-        # Penanganan MultiIndex (Format baru yfinance)
+        # Standarisasi kolom (kadang yfinance pakai MultiIndex)
         if isinstance(df.columns, pd.MultiIndex): 
             df.columns = df.columns.get_level_values(0)
             
-        # Rename kolom biar standar
         df.rename(columns={'Close': 'close', 'Volume': 'volume', 'High': 'high', 'Low': 'low', 'Open': 'open'}, inplace=True)
 
         # --- 1. INDIKATOR UTAMA ---
@@ -40,8 +39,8 @@ def get_technical_analysis(symbol):
         # Volume
         df['Vol_Avg'] = df['volume'].rolling(20).mean()
 
-        # --- 2. RISIKO: ATR (AVERAGE TRUE RANGE) ---
-        # ATR mengukur volatilitas. Makin tinggi ATR, makin lebar Stop Loss-nya.
+        # --- 2. RISIKO: ATR & SUPPORT/RESISTANCE ---
+        # ATR (Volatilitas): Digunakan untuk menghitung jarak Stop Loss yang dinamis
         high_low = df['high'] - df['low']
         high_close = (df['high'] - df['close'].shift()).abs()
         low_close = (df['low'] - df['close'].shift()).abs()
@@ -56,7 +55,7 @@ def get_technical_analysis(symbol):
         curr = df.iloc[-1]
         prev = df.iloc[-2]
 
-        # Deskripsi Tren
+        # --- 3. DESKRIPSI ---
         trend = "UPTREND" if curr['close'] > curr['SMA'] else "DOWNTREND"
         
         rsi_desc = "NETRAL"
@@ -79,9 +78,9 @@ def get_technical_analysis(symbol):
             'rsi_desc': rsi_desc,
             'macd_desc': macd_desc,
             'vol_desc': vol_desc,
+            'atr': float(curr['ATR']),
             'support': float(support_classic),
-            'resistance': float(resistance_classic),
-            'atr': float(curr['ATR']) # Kita butuh ini untuk kalkulasi Stop Loss dinamis
+            'resistance': float(resistance_classic)
         }
     except Exception as e:
         return None
