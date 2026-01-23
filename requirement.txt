@@ -1,0 +1,6 @@
+yfinance
+google-generativeai
+pandas
+colorama
+python-dotenv
+requests
