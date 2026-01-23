@@ -15,9 +15,6 @@ async def run_analysis(symbol):
     
     loop = asyncio.get_running_loop()
     
-    # --- PERBAIKAN: JALANKAN SATU PER SATU (SEQUENTIAL) ---
-    # Ini mencegah tabrakan resource yfinance
-    
     # 1. Analisa Saham
     tech_data = await loop.run_in_executor(None, technical.get_technical_analysis, symbol)
     
@@ -40,7 +37,7 @@ async def main():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(f"{Fore.GREEN}=== AI TRADER PRO (STABLE V19) ==={Style.RESET_ALL}")
     
-    symbol = input("Masukkan Kode Saham: ").upper() or "NVDA"
+    symbol = "NVDA"
     print("-" * 50)
     
     print(f"{Fore.CYAN}--- STATUS POSISI KAMU ---{Style.RESET_ALL}")
@@ -53,7 +50,7 @@ async def main():
     total_investment = 0.0
     
     if is_holding:
-        print(f"\n{Fore.YELLOW}--- INFO PORTOFOLIO ---{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}--- INFO PORTOFOLIO ---{Style.RESET_ALL}")
         try:
             invest_input = input("Total Modal Awal ($)     : ")
             total_investment = float(invest_input) if invest_input else 1000.0
@@ -95,7 +92,7 @@ async def main():
     os.system('cls' if os.name == 'nt' else 'clear')
     
     print(f"{Fore.CYAN}╔══════════════════════════════════════════════════════╗")
-    print(f"║   ANALISA HYBRID: {symbol.ljust(10)}                             ║")
+    print(f"║   ANALISA HYBRID: {symbol.ljust(10)}                        ║")
     print(f"╚══════════════════════════════════════════════════════╝{Style.RESET_ALL}")
     
     # 1. MARKET WEATHER

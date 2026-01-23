@@ -2,8 +2,9 @@ import requests
 import re
 import json
 import google.generativeai as genai
-from datetime import datetime # <--- PENTING BUAT CEK WAKTU
+from datetime import datetime
 from config import JINA_API_KEY, model
+from colorama import Fore, Style # Biar error kelihatan merah
 
 def get_jina_news(symbol):
     VIP_SOURCES = [
@@ -14,36 +15,58 @@ def get_jina_news(symbol):
     
     vip_news = []
     regular_news = []
+    
+    # Teknik Dynamic Time Injection (Agar berita fresh)
     current_period = datetime.now().strftime("%B %Y")
     
     queries = [
-        f"{symbol} supply chain news {current_period}", # e.g. "NVDA supply chain news January 2026"
+        f"{symbol} supply chain news {current_period}", 
         f"latest {symbol} chip demand analysis {current_period}",
         f"{symbol} stock production update {current_period}"
     ]
     
+    # Cek apakah API Key ada
+    if not JINA_API_KEY:
+        print(f"{Fore.RED}[ERROR] JINA_API_KEY Kosong di .env!{Style.RESET_ALL}")
+        return []
+    
     headers = {'Authorization': f'Bearer {JINA_API_KEY}', 'Accept': 'application/json'}
+    
+    print(f"{Fore.YELLOW}[DEBUG] Mencari berita via Jina...{Style.RESET_ALL}", end="\r")
+    
+    found_any = False
     
     for q in queries:
         try:
             url = f"https://s.jina.ai/{q}"
             response = requests.get(url, headers=headers, timeout=10)
+            
+            # --- DEBUGGING BLOCK ---
+            if response.status_code != 200:
+                print(f"{Fore.RED}[DEBUG] Jina Error {response.status_code}: {response.text[:50]}...{Style.RESET_ALL}")
+                continue
+            # -----------------------
+
             if response.status_code == 200:
                 data = response.json().get('data', [])
+                if data: found_any = True
+                
                 for item in data:
                     title = item.get('title', 'No Title')
-                    # Ambil 500 karakter konten
                     content = item.get('content', '')[:500].replace("\n", " ")
                     source = item.get('url', '')
                     
-                    # Tambahkan Date Metadata jika ada (Jina kadang kasih, kadang nggak)
-                    # Tapi dengan Query Injection di atas, kontennya harusnya relevan.
                     formatted = f"Title: {title}\nSummary: {content}...\nSource: {source}\n"
                     
                     is_vip = any(vip.lower() in source.lower() for vip in VIP_SOURCES)
                     if is_vip: vip_news.append(formatted)
                     else: regular_news.append(formatted)
-        except: continue
+        except Exception as e:
+            print(f"{Fore.RED}[DEBUG] Connection Error: {e}{Style.RESET_ALL}")
+            continue
+
+    if not found_any:
+        print(f"{Fore.RED}[DEBUG] Jina return 200 OK tapi tidak ada artikel.{Style.RESET_ALL}")
 
     # Anti-Shuffle Logic
     final_news = list(dict.fromkeys(vip_news))
@@ -56,33 +79,24 @@ def get_jina_news(symbol):
 
 async def analyze_sentiment(news_list, symbol):
     if not news_list:
-        return {'score': 0, 'reason': 'Tidak ada berita', 'headlines': []}
+        return {'score': 0, 'reason': 'Tidak ada berita (Cek API Key / Koneksi)', 'headlines': []}
     
     headlines_debug = [n.split('\n')[0].replace("Title: ", "") for n in news_list]
     
-    # --- TEKNIK 2: AI DATE VALIDATION ---
-    # Kita beritahu AI tanggal hari ini, dan suruh dia jadi satpam.
     today_date = datetime.now().strftime("%Y-%m-%d")
     
     prompt = f"""
     Role: Senior Financial Analyst. 
-    Current Date: {today_date} (YYYY-MM-DD).
-    
+    Current Date: {today_date}.
     Task: Analyze news for {symbol}.
     
     DATA: 
     {chr(10).join(news_list)}
     
-    CRITICAL INSTRUCTION (RECENCY CHECK):
-    1. Check for time markers in the text (e.g., "2 days ago", "last week", dates).
-    2. IGNORE any news that is clearly older than 30 days from {today_date}.
-    3. If a news item is old, do not include it in the Sentiment Score calculation.
-    
-    ANALYSIS STEPS:
-    1. Identify KEY POSITIVE factors (Fresh news only).
-    2. Identify KEY NEGATIVE factors (Fresh news only).
-    3. Weigh the evidence (-10 to +10).
-    4. Summarize the reason in 1 sentence.
+    INSTRUCTIONS:
+    1. IGNORE news older than 30 days.
+    2. Analyze Sentiment (-10 to +10).
+    3. Summarize reason in 1 sentence.
     
     RETURN JSON ONLY: {{"score": 0, "reason": "Summary"}}
     """
